@@ -1,0 +1,162 @@
+version: '3'
+
+services:
+  
+  development:
+    image: jonatangouveia/web-development
+    container_name: development 
+    restart: always
+    volumes:
+      - ./nginx:/etc/nginx
+      - ./projects/web:/var/www/
+    ports:
+      - '80:80'
+      - '443:443'
+    expose:
+      - '22'
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.10
+
+  databases:
+    image: mariadb
+    container_name: databases
+    restart: always
+    volumes:
+      - ./data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=LWKy2>q6:h3bgeVg
+      - MYSQL_USER=wp              
+      - MYSQL_PASSWORD=wp
+      - MYSQL_DATABASE=model_db               
+    ports:
+      - '3306:3306'
+    depends_on:
+      - development
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.11
+  
+  node:
+    image: node:lts-stretch
+    container_name: node
+    restart: always
+    volumes:
+      - ./projects/app:/usr/app/
+    working_dir: /usr/app/
+    command: npx frontity create my-app && cd my-app && npx frontity dev
+    ports:
+      - '3000:3000'
+    depends_on:
+      - development
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.12
+    
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=171.28.5.11
+      - UPLOAD_LIMIT=40960
+    restart: always
+    links:
+      - databases
+    ports:
+      - '8888:80'
+    depends_on:
+      - databases
+    volumes:
+      - /sessions
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.13
+  
+  redis:
+    image: redis:6.0-rc1-alpine
+    container_name: redis
+    restart: always
+    ports:
+      - '6379:6379'
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.14
+
+  elasticSearch01:
+    image: elasticsearch:7.5.2 
+    container_name: elasticsearch-es01
+    restart: always
+    environment:
+      - node.name=elasticsearch-es01
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=elasticsearch-es02,elasticsearch-es03
+      - cluster.initial_master_nodes=elasticsearch-es01,elasticsearch-es02,elasticsearch-es03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./cache/es01:/usr/share/elasticsearch/data
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.15
+  
+  elasticSearch02:
+    image: elasticsearch:7.5.2
+    container_name: elasticsearch-es02
+    environment:
+      - node.name=elasticsearch-es02
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=elasticsearch-es01,elasticsearch-es03
+      - cluster.initial_master_nodes=elasticsearch-es01,elasticsearch-es02,elasticsearch-es03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./cache/es02:/usr/share/elasticsearch/data
+    depends_on:
+      - elasticSearch01
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.16
+  
+  elasticSearch03:
+    image: elasticsearch:7.5.2
+    container_name: elasticsearch-es03
+    environment:
+      - node.name=es03
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=elasticsearch-es01,elasticsearch-es02
+      - cluster.initial_master_nodes=elasticsearch-es01,elasticsearch-es02,elasticsearch-es03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./cache/es03:/usr/share/elasticsearch/data
+    depends_on:
+      - elasticSearch02
+    networks: 
+      dev:
+        ipv4_address: 171.28.5.17
+
+networks: 
+  dev:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
+    ipam:
+      driver: default
+      config:
+      - subnet: 171.28.0.0/16
